@@ -29,6 +29,7 @@ mongoose.connect(MONGO_URI)
 const userSchema = new mongoose.Schema({
   name:  { type: String, required: true },
   email: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
   createdAt: { type: Date, default: Date.now }
 });
 
@@ -43,21 +44,41 @@ app.get('/health', (_req, res) => {
   res.status(200).json({ status: 'healthy', service: 'user-service' });
 });
 
-// Create a new user
+// Create a new user (Signup)
 app.post('/users', async (req, res) => {
   try {
-    const { name, email } = req.body;
-    if (!name || !email) {
-      return res.status(400).json({ error: 'name and email are required' });
+    const { name, email, password } = req.body;
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: 'name, email, and password are required' });
     }
-    const user = new User({ name, email });
+    const user = new User({ name, email, password });
     await user.save();
     console.log(`[user-service] Created user: ${user._id}`);
-    res.status(201).json(user);
+    
+    // Do not return the password in the response!
+    res.status(201).json({ _id: user._id, name: user.name, email: user.email });
   } catch (err) {
     if (err.code === 11000) {
       return res.status(409).json({ error: 'Email already exists' });
     }
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// User Login (Authentication)
+app.post('/users/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: 'email and password are required' });
+    }
+    
+    const user = await User.findOne({ email, password });
+    if (!user) return res.status(401).json({ error: 'Invalid email or password' });
+    
+    console.log(`[user-service] Logged in user: ${user._id}`);
+    res.status(200).json({ _id: user._id, name: user.name, email: user.email });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });

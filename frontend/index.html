@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Task Manager — CA2 Demo</title>
+  <title>Task Manager — Persistent Auth Demo</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
@@ -14,6 +14,8 @@
       background: #0f0f1a;
       color: #e0e0e0;
       min-height: 100vh;
+      display: flex;
+      flex-direction: column;
     }
 
     /* ── Header ── */
@@ -32,181 +34,120 @@
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
-    header .badge {
-      background: rgba(102, 126, 234, 0.15);
-      color: #667eea;
-      padding: 6px 14px;
-      border-radius: 20px;
-      font-size: 0.75rem;
-      font-weight: 600;
-      letter-spacing: 0.5px;
+    .user-profile {
+      display: none;
+      align-items: center;
+      gap: 15px;
+    }
+    .user-profile span {
+      font-size: 0.9rem;
+      font-weight: 500;
     }
 
-    /* ── Layout ── */
+    /* ── Layout & Cards ── */
     .container {
-      max-width: 1100px;
-      margin: 0 auto;
-      padding: 32px 20px;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 24px;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 0 20px;
+      width: 100%;
     }
-
-    /* ── Cards ── */
     .card {
       background: linear-gradient(145deg, #1a1a2e, #16213e);
       border: 1px solid rgba(255,255,255,0.06);
       border-radius: 16px;
-      padding: 28px;
-      transition: transform 0.2s, box-shadow 0.2s;
-    }
-    .card:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 8px 32px rgba(102, 126, 234, 0.1);
+      padding: 35px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
     }
     .card h2 {
-      font-size: 1.1rem;
+      font-size: 1.4rem;
       font-weight: 600;
-      margin-bottom: 20px;
+      margin-bottom: 25px;
       color: #fff;
-      display: flex;
-      align-items: center;
-      gap: 8px;
+      text-align: center;
     }
-    .card h2 .icon { font-size: 1.3rem; }
+
+    /* ── Screens ── */
+    #authScreen { display: block; max-width: 450px; margin: 60px auto; }
+    #dashboardScreen { display: none; }
+    .toggle-text {
+      text-align: center; margin-top: 20px; font-size: 0.85rem; color: #888;
+    }
+    .toggle-text a { color: #667eea; cursor: pointer; text-decoration: none; font-weight: 600; }
+    .toggle-text a:hover { text-decoration: underline; }
 
     /* ── Forms ── */
-    .form-group { margin-bottom: 14px; }
+    .form-group { margin-bottom: 18px; }
     .form-group label {
-      display: block;
-      font-size: 0.78rem;
-      font-weight: 500;
-      color: #888;
-      margin-bottom: 6px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
+      display: block; font-size: 0.8rem; font-weight: 500; color: #888;
+      margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;
     }
     input, select, textarea {
-      width: 100%;
-      padding: 10px 14px;
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 10px;
-      color: #e0e0e0;
-      font-family: 'Inter', sans-serif;
-      font-size: 0.9rem;
-      outline: none;
-      transition: border-color 0.2s;
+      width: 100%; padding: 12px 16px; background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.1); border-radius: 10px;
+      color: #e0e0e0; font-family: 'Inter', sans-serif; font-size: 0.95rem;
+      outline: none; transition: border-color 0.2s;
     }
-    input:focus, select:focus, textarea:focus {
-      border-color: #667eea;
-    }
-    textarea { resize: vertical; min-height: 60px; }
+    input:focus, select:focus, textarea:focus { border-color: #667eea; }
+    textarea { resize: vertical; min-height: 80px; }
 
     button {
-      width: 100%;
-      padding: 12px;
-      border: none;
-      border-radius: 10px;
-      font-family: 'Inter', sans-serif;
-      font-size: 0.9rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: transform 0.15s, box-shadow 0.15s;
-      margin-top: 8px;
+      width: 100%; padding: 14px; border: none; border-radius: 10px;
+      font-family: 'Inter', sans-serif; font-size: 0.95rem; font-weight: 600;
+      cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; margin-top: 10px;
     }
     button:hover { transform: translateY(-1px); }
     button:active { transform: translateY(0); }
 
     .btn-primary {
-      background: linear-gradient(135deg, #667eea, #764ba2);
-      color: #fff;
+      background: linear-gradient(135deg, #667eea, #764ba2); color: #fff;
       box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3);
     }
     .btn-success {
-      background: linear-gradient(135deg, #11998e, #38ef7d);
-      color: #0f0f1a;
+      background: linear-gradient(135deg, #11998e, #38ef7d); color: #0f0f1a;
       box-shadow: 0 4px 16px rgba(56, 239, 125, 0.2);
     }
+    .btn-logout {
+      width: auto; padding: 8px 16px; font-size: 0.8rem; background: rgba(244,67,54,0.1);
+      color: #f44336; border: 1px solid rgba(244,67,54,0.2); box-shadow: none; margin: 0;
+    }
 
-    /* ── Lists ── */
-    .full-width { grid-column: 1 / -1; }
-    .list { margin-top: 12px; }
+    /* ── Dashboard Grid ── */
+    .dashboard-grid {
+      display: grid; grid-template-columns: 1fr 1.5fr; gap: 24px;
+    }
+
+    /* ── Tasks List ── */
+    .list { margin-top: 15px; }
     .list-item {
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 12px;
-      padding: 16px 20px;
-      margin-bottom: 10px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      transition: background 0.2s;
+      background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 12px; padding: 18px 22px; margin-bottom: 12px;
+      display: flex; justify-content: space-between; align-items: center;
     }
     .list-item:hover { background: rgba(255,255,255,0.06); }
-    .list-item .info h3 {
-      font-size: 0.95rem;
-      font-weight: 600;
-      color: #fff;
-    }
-    .list-item .info p {
-      font-size: 0.8rem;
-      color: #888;
-      margin-top: 3px;
-    }
-    .list-item .actions { display: flex; gap: 8px; align-items: center; }
-    .list-item .actions select {
-      width: auto;
-      padding: 6px 10px;
-      font-size: 0.78rem;
-    }
+    .list-item .info h3 { font-size: 1rem; font-weight: 600; color: #fff; }
+    .list-item .info p { font-size: 0.85rem; color: #aaa; margin-top: 5px; }
+    .list-item .actions { display: flex; gap: 10px; align-items: center; }
+    .list-item .actions select { width: auto; padding: 8px 12px; font-size: 0.8rem; }
 
     .status-badge {
-      font-size: 0.7rem;
-      font-weight: 600;
-      padding: 4px 10px;
-      border-radius: 20px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
+      font-size: 0.75rem; font-weight: 600; padding: 6px 12px; border-radius: 20px;
+      text-transform: uppercase; letter-spacing: 0.5px;
     }
     .status-pending    { background: rgba(255,193,7,0.15); color: #ffc107; }
     .status-in-progress { background: rgba(33,150,243,0.15); color: #2196f3; }
     .status-completed  { background: rgba(56,239,125,0.15); color: #38ef7d; }
 
     .delete-btn {
-      background: rgba(244,67,54,0.1);
-      color: #f44336;
-      border: 1px solid rgba(244,67,54,0.2);
-      padding: 6px 12px;
-      border-radius: 8px;
-      font-size: 0.78rem;
-      font-weight: 600;
-      cursor: pointer;
-      width: auto;
-      margin: 0;
+      background: rgba(244,67,54,0.1); color: #f44336; border: 1px solid rgba(244,67,54,0.2);
+      padding: 8px 14px; border-radius: 8px; font-size: 0.8rem; width: auto; margin: 0;
     }
-
-    .empty-msg {
-      text-align: center;
-      color: #555;
-      padding: 30px;
-      font-size: 0.9rem;
-    }
+    .empty-msg { text-align: center; color: #777; padding: 40px; font-size: 0.95rem; }
 
     /* ── Toast ── */
     .toast {
-      position: fixed;
-      bottom: 24px;
-      right: 24px;
-      padding: 14px 24px;
-      border-radius: 12px;
-      font-size: 0.85rem;
-      font-weight: 500;
-      color: #fff;
-      opacity: 0;
-      transform: translateY(20px);
-      transition: all 0.3s;
-      z-index: 100;
+      position: fixed; bottom: 24px; right: 24px; padding: 14px 24px;
+      border-radius: 12px; font-size: 0.85rem; font-weight: 500; color: #fff;
+      opacity: 0; transform: translateY(20px); transition: all 0.3s; z-index: 100;
     }
     .toast.show { opacity: 1; transform: translateY(0); }
     .toast.success { background: linear-gradient(135deg, #11998e, #38ef7d); color: #0f0f1a; }
@@ -214,72 +155,83 @@
   </style>
 </head>
 <body>
-  <!-- Header -->
+  
   <header>
     <h1>📋 Task Manager</h1>
-    <span class="badge">MICROSERVICES DEMO</span>
+    <div id="userProfile" class="user-profile">
+      <span id="welcomeMsg">Welcome, User</span>
+      <button class="btn-logout" onclick="logout()">Sign Out</button>
+    </div>
   </header>
 
-  <div class="container">
-    <!-- Create User -->
+  <!-- ==================== AUTH SCREEN ==================== -->
+  <div id="authScreen" class="container">
     <div class="card">
-      <h2><span class="icon">👤</span> Create User</h2>
+      <h2 id="authTitle">Sign In to Task Manager</h2>
+      
+      <!-- Only shown on signup -->
+      <div class="form-group" id="nameGroup" style="display:none;">
+        <label>Full Name</label>
+        <input type="text" id="authName" placeholder="John Doe" />
+      </div>
+      
       <div class="form-group">
-        <label>Name</label>
-        <input type="text" id="userName" placeholder="John Doe" />
+        <label>Email Address</label>
+        <input type="email" id="authEmail" placeholder="john@example.com" />
       </div>
+      
       <div class="form-group">
-        <label>Email</label>
-        <input type="email" id="userEmail" placeholder="john@example.com" />
+        <label>Password</label>
+        <input type="password" id="authPassword" placeholder="••••••••" />
       </div>
-      <button class="btn-primary" onclick="createUser()">Create User</button>
-    </div>
-
-    <!-- Create Task -->
-    <div class="card">
-      <h2><span class="icon">✅</span> Create Task</h2>
-      <div class="form-group">
-        <label>Assign to User</label>
-        <select id="taskUserId">
-          <option value="">— Select a user —</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Title</label>
-        <input type="text" id="taskTitle" placeholder="Fix login bug" />
-      </div>
-      <div class="form-group">
-        <label>Description</label>
-        <textarea id="taskDesc" placeholder="Details about the task..."></textarea>
-      </div>
-      <button class="btn-success" onclick="createTask()">Create Task</button>
-    </div>
-
-    <!-- Users List -->
-    <div class="card">
-      <h2><span class="icon">👥</span> Users</h2>
-      <div id="usersList" class="list">
-        <p class="empty-msg">No users yet</p>
-      </div>
-    </div>
-
-    <!-- Tasks List -->
-    <div class="card">
-      <h2><span class="icon">📝</span> Tasks</h2>
-      <div id="tasksList" class="list">
-        <p class="empty-msg">No tasks yet</p>
-      </div>
+      
+      <button class="btn-primary" id="authBtn" onclick="handleAuth()">Sign In</button>
+      
+      <p class="toggle-text" id="toggleAuthText">
+        Don't have an account? <a onclick="toggleAuthMode()">Sign up here</a>
+      </p>
     </div>
   </div>
 
-  <!-- Toast -->
+  <!-- ==================== DASHBOARD SCREEN ==================== -->
+  <div id="dashboardScreen" class="container" style="max-width: 1200px;">
+    <div class="dashboard-grid">
+      
+      <!-- Create Task -->
+      <div class="card" style="align-self: start;">
+        <h2 style="text-align: left;">➕ New Task</h2>
+        <div class="form-group">
+          <label>Task Title</label>
+          <input type="text" id="taskTitle" placeholder="What needs to be done?" />
+        </div>
+        <div class="form-group">
+          <label>Description</label>
+          <textarea id="taskDesc" placeholder="Any extra details..."></textarea>
+        </div>
+        <button class="btn-success" onclick="createTask()">Create Task</button>
+      </div>
+
+      <!-- Isolated Tasks List -->
+      <div class="card">
+        <h2 style="text-align: left;">📝 My Tasks</h2>
+        <div id="tasksList" class="list">
+          <p class="empty-msg">Loading tasks...</p>
+        </div>
+      </div>
+      
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
   <div class="toast" id="toast"></div>
 
   <script>
-    // ── Configuration ──
-    // Change these URLs based on your deployment
     const USER_API = 'http://localhost:3000';
     const TASK_API = 'http://localhost:3001';
+
+    // ── State Management ──
+    let isSignupMode = false;
+    let currentUser = null; // { _id, name, email }
 
     // ── Toast Notification ──
     function showToast(msg, type = 'success') {
@@ -289,70 +241,98 @@
       setTimeout(() => t.classList.remove('show'), 3000);
     }
 
-    // ── Users ──
-    async function loadUsers() {
-      try {
-        const res = await fetch(`${USER_API}/users`);
-        const users = await res.json();
-        const el = document.getElementById('usersList');
-        const sel = document.getElementById('taskUserId');
-
-        if (users.length === 0) {
-          el.innerHTML = '<p class="empty-msg">No users yet</p>';
-          sel.innerHTML = '<option value="">— Select a user —</option>';
-          return;
-        }
-
-        el.innerHTML = users.map(u => `
-          <div class="list-item">
-            <div class="info">
-              <h3>${u.name}</h3>
-              <p>${u.email}</p>
-            </div>
-            <span style="color:#667eea;font-size:0.75rem;">${u._id.slice(-6)}</span>
-          </div>
-        `).join('');
-
-        sel.innerHTML = '<option value="">— Select a user —</option>' +
-          users.map(u => `<option value="${u._id}">${u.name} (${u.email})</option>`).join('');
-      } catch (err) {
-        console.error('Failed to load users', err);
+    // ── Initialization ──
+    window.onload = () => {
+      // Check persistency by reading localStorage
+      const savedUser = localStorage.getItem('taskManagerUser');
+      if (savedUser) {
+        currentUser = JSON.parse(savedUser);
+        showDashboard();
+      } else {
+        showAuth();
       }
+    };
+
+    // ── UI Toggles ──
+    function showAuth() {
+      document.getElementById('authScreen').style.display = 'block';
+      document.getElementById('dashboardScreen').style.display = 'none';
+      document.getElementById('userProfile').style.display = 'none';
     }
 
-    async function createUser() {
-      const name = document.getElementById('userName').value.trim();
-      const email = document.getElementById('userEmail').value.trim();
-      if (!name || !email) return showToast('Name and email required', 'error');
+    function showDashboard() {
+      document.getElementById('authScreen').style.display = 'none';
+      document.getElementById('dashboardScreen').style.display = 'block';
+      document.getElementById('userProfile').style.display = 'flex';
+      document.getElementById('welcomeMsg').textContent = `Welcome, ${currentUser.name}`;
+      loadIsolatedTasks();
+    }
+
+    function toggleAuthMode() {
+      isSignupMode = !isSignupMode;
+      document.getElementById('nameGroup').style.display = isSignupMode ? 'block' : 'none';
+      document.getElementById('authTitle').textContent = isSignupMode ? 'Create an Account' : 'Sign In to Task Manager';
+      document.getElementById('authBtn').textContent = isSignupMode ? 'Sign Up' : 'Sign In';
+      document.getElementById('toggleAuthText').innerHTML = isSignupMode 
+        ? `Already have an account? <a onclick="toggleAuthMode()">Sign in here</a>`
+        : `Don't have an account? <a onclick="toggleAuthMode()">Sign up here</a>`;
+    }
+
+    function logout() {
+      localStorage.removeItem('taskManagerUser');
+      currentUser = null;
+      document.getElementById('authEmail').value = '';
+      document.getElementById('authPassword').value = '';
+      showToast('Logged out securely!');
+      showAuth();
+    }
+
+    // ── Authentication API ──
+    async function handleAuth() {
+      const name = document.getElementById('authName').value.trim();
+      const email = document.getElementById('authEmail').value.trim();
+      const password = document.getElementById('authPassword').value;
+
+      if (!email || !password) return showToast('Email and password required', 'error');
+      if (isSignupMode && !name) return showToast('Name is required for signup', 'error');
+
+      const url = isSignupMode ? `${USER_API}/users` : `${USER_API}/users/login`;
+      const body = isSignupMode ? { name, email, password } : { email, password };
 
       try {
-        const res = await fetch(`${USER_API}/users`, {
+        const res = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, email })
+          body: JSON.stringify(body)
         });
-        if (!res.ok) {
-          const err = await res.json();
-          return showToast(err.error || 'Failed', 'error');
-        }
-        document.getElementById('userName').value = '';
-        document.getElementById('userEmail').value = '';
-        showToast('User created!');
-        loadUsers();
+        
+        const data = await res.json();
+        
+        if (!res.ok) return showToast(data.error || 'Authentication failed', 'error');
+        
+        // Save persistency
+        currentUser = data;
+        localStorage.setItem('taskManagerUser', JSON.stringify(currentUser));
+        
+        showToast(isSignupMode ? 'Account created successfully!' : 'Signed in successfully!');
+        showDashboard();
       } catch (err) {
-        showToast('Cannot reach user-service', 'error');
+        showToast('Cannot connect to user-service', 'error');
       }
     }
 
-    // ── Tasks ──
-    async function loadTasks() {
+    // ── Tasks API (ISOLATED) ──
+    async function loadIsolatedTasks() {
+      if (!currentUser) return;
+      
       try {
-        const res = await fetch(`${TASK_API}/tasks`);
+        // DATA ISOLATION: Explicitly request ONLY tasks belonging to currentUser._id
+        const res = await fetch(`${TASK_API}/tasks?userId=${currentUser._id}`);
         const tasks = await res.json();
         const el = document.getElementById('tasksList');
 
         if (tasks.length === 0) {
-          el.innerHTML = '<p class="empty-msg">No tasks yet</p>';
+          el.innerHTML = '<p class="empty-msg">You have no tasks! Create one on the left.</p>';
           return;
         }
 
@@ -364,12 +344,12 @@
             </div>
             <div class="actions">
               <span class="status-badge status-${t.status}">${t.status}</span>
-              <select onchange="updateStatus('${t._id}', this.value)">
+              <select onchange="updateTaskStatus('${t._id}', this.value)">
                 <option value="pending"     ${t.status === 'pending' ? 'selected' : ''}>Pending</option>
                 <option value="in-progress" ${t.status === 'in-progress' ? 'selected' : ''}>In Progress</option>
                 <option value="completed"   ${t.status === 'completed' ? 'selected' : ''}>Completed</option>
               </select>
-              <button class="delete-btn" onclick="deleteTask('${t._id}')">Delete</button>
+              <button class="delete-btn" onclick="deleteTask('${t._id}')">Remove</button>
             </div>
           </div>
         `).join('');
@@ -379,39 +359,40 @@
     }
 
     async function createTask() {
-      const userId = document.getElementById('taskUserId').value;
       const title = document.getElementById('taskTitle').value.trim();
       const description = document.getElementById('taskDesc').value.trim();
-      if (!userId || !title) return showToast('Select user and enter title', 'error');
+      if (!title) return showToast('Task title is required', 'error');
 
       try {
         const res = await fetch(`${TASK_API}/tasks`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId, title, description })
+          body: JSON.stringify({ userId: currentUser._id, title, description })
         });
+        
         if (!res.ok) {
           const err = await res.json();
-          return showToast(err.error || 'Failed', 'error');
+          return showToast(err.error || 'Failed to create task', 'error');
         }
+        
         document.getElementById('taskTitle').value = '';
         document.getElementById('taskDesc').value = '';
-        showToast('Task created!');
-        loadTasks();
+        showToast('Task added successfully!');
+        loadIsolatedTasks(); // Reload dashboard
       } catch (err) {
-        showToast('Cannot reach task-service', 'error');
+        showToast('Cannot connect to task-service', 'error');
       }
     }
 
-    async function updateStatus(id, status) {
+    async function updateTaskStatus(id, status) {
       try {
         await fetch(`${TASK_API}/tasks/${id}/status`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status })
         });
-        showToast(`Status → ${status}`);
-        loadTasks();
+        showToast(`Status updated to ${status}`);
+        loadIsolatedTasks();
       } catch (err) {
         showToast('Update failed', 'error');
       }
@@ -420,16 +401,12 @@
     async function deleteTask(id) {
       try {
         await fetch(`${TASK_API}/tasks/${id}`, { method: 'DELETE' });
-        showToast('Task deleted');
-        loadTasks();
+        showToast('Task removed');
+        loadIsolatedTasks();
       } catch (err) {
         showToast('Delete failed', 'error');
       }
     }
-
-    // ── Init ──
-    loadUsers();
-    loadTasks();
   </script>
 </body>
 </html>
