@@ -113,6 +113,16 @@ jobs:
           kubectl cluster-info
           kubectl get nodes
 
+      - name: Install storage provisioner for KinD
+        run: |
+          # KinD has no default StorageClass — install local-path-provisioner
+          kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.26/deploy/local-path-storage.yaml
+          # Set it as the default StorageClass so PVCs bind automatically
+          kubectl patch storageclass local-path -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
+          # Wait for provisioner pod to be ready
+          kubectl rollout status deployment/local-path-provisioner -n local-path-storage --timeout=60s
+          echo "✅ Storage provisioner ready"
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
 
