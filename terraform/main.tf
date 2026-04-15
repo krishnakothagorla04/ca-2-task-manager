@@ -42,14 +42,18 @@ resource "kubernetes_persistent_volume_claim" "mongo_pvc" {
     namespace = kubernetes_namespace.taskmanager.metadata[0].name
   }
   spec {
-    access_modes = ["ReadWriteOnce"]
+    access_modes       = ["ReadWriteOnce"]
+    storage_class_name = "local-path"
     resources {
       requests = {
         storage = var.mongo_storage_size
       }
     }
   }
+  # Don't block Terraform waiting for PVC to bind (provisioner binds async)
+  wait_until_bound = false
 }
+
 
 resource "kubernetes_deployment" "mongodb" {
   metadata {
