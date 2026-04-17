@@ -1,145 +1,76 @@
-# 📋 Task Manager — Enterprise DevOps System (CA2)
+# Enterprise DevOps & Microservices Task Manager
+**Continuous Assessment 2 (CA2) Final Project**
 
-A microservices-based Task Manager deployed via a fully automated CI/CD pipeline with Infrastructure as Code.
+---
 
-## 🏗️ Architecture
+## 1. Project Overview & Objective
+This project is an enterprise-grade, DevOps-centric **Task Manager Application**. The core objective of this project is not just to build an application, but to orchestrate, automate, and secure its entire lifecycle. 
 
-```
-┌────────────┐       REST        ┌────────────┐
-│  Frontend   │ ──────────────── │ task-service│──┐
-│  (HTML/JS)  │                  │  :3001      │  │ validates user
-└────────────┘                   └─────────────┘  │
-       │                               │          │
-       │                               ▼          │
-       │                         ┌──────────┐     │
-       │                         │ MongoDB  │     │
-       │                         │  :27017  │     │
-       │                         └──────────┘     │
-       │                               ▲          │
-       │          REST           ┌─────────────┐  │
-       └────────────────────────►│ user-service│◄─┘
-                                 │  :3000      │
-                                 └─────────────┘
-```
+The system leverages a **Microservices Architecture** entirely provisioned via **Infrastructure as Code (Terraform)**, deployed to **Kubernetes**, and strictly automated through a **GitHub Actions CI/CD Pipeline**. It satisfies advanced enterprise requirements including Zero-Downtime deployments, DevSecOps vulnerability scanning, Local Storage Persistence, and mathematically driven Auto-Scaling.
 
-## ⚙️ Tech Stack
+---
 
-| Layer            | Tool                         |
-|------------------|------------------------------|
-| Backend          | Node.js (Express)            |
-| Database         | MongoDB                      |
-| Containerization | Docker                       |
-| CI/CD            | GitHub Actions               |
-| Orchestration    | Kubernetes (Minikube)        |
-| IaC              | Terraform                    |
-| Registry         | Docker Hub                   |
-| Security Scan    | Trivy                        |
+## 2. The Application Architecture (Microservices)
+Instead of a traditional monolithic backend, the application logic is separated into decoupled services that communicate synchronously over the network.
 
-## 🚀 Quick Start (Local Development)
+### 2.1 The Services
+* **User-Service (Node.js/Express):** Handles user registration, secure authentication, and session generation.
+* **Task-Service (Node.js/Express):** Handles the creation, status updating, and deletion of tasks.
+* **MongoDB (Database):** A centralized NoSQL database utilized dynamically by both services via Mongoose to maintain dedicated collections (`users` and `tasks`).
+* **Frontend SPA:** A single-page HTML/JS application (Vanilla JS) that handles Authentication (Sign Up/Sign In), Session Persistence (via `localStorage`), and strict **Data Isolation** (users can only view and manage tasks belonging directly to their secure Session ID).
 
-### Prerequisites
-- Docker Desktop running
-- Node.js 18+
+### 2.2 Proof of Inter-Service Communication
+When a user attempts to create a task via the Task-Service, the Task-Service does not blindly insert it into the database. Instead, the Task-Service initiates a synchronous `HTTP GET` REST API request out across the Kubernetes network to the User-Service to cryptographically validate that the user exists. If the User-Service denies the existence of the user, the task creation halts.
 
-### Run with Docker Compose
-```bash
-docker-compose up --build
-```
+---
 
-Services will be available at:
-- **User Service:** http://localhost:3000
-- **Task Service:** http://localhost:3001
-- **Frontend:**     Open `frontend/index.html` in a browser
+## 3. Continuous Integration & Continuous Deployment (CI/CD)
+The deployment is entirely disconnected from manual human interaction. Code pushed to the `main` branch on GitHub instantly triggers a 140-line `deploy.yml` CI/CD Pipeline.
 
-### Test the APIs
-```bash
-# Create a user
-curl -X POST http://localhost:3000/users \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Alice","email":"alice@example.com"}'
+### 3.1 Unification via Matrix Strategy
+Rather than maintaining split pipelines, the project uses a **Matrix Build Strategy** to uniformly loop over both microservices concurrently, ensuring both services receive identical testing and security enforcement.
 
-# Create a task (use the user _id from above)
-curl -X POST http://localhost:3001/tasks \
-  -H "Content-Type: application/json" \
-  -d '{"userId":"<USER_ID>","title":"Setup CI/CD","description":"Automate deployment"}'
+### 3.2 Pipeline Flow
+1. **Build & Test:** Provisions Node.js and installs dependencies.
+2. **Dockerization:** Builds lightweight, multi-stage `node:18-alpine` containers.
+3. **DevSecOps (Trivy):** An AquaSecurity Trivy scan halts the pipeline if `CRITICAL` or `HIGH` vulnerabilities are detected inside the freshly built Docker image.
+4. **Push:** Uploads the authorized images to Docker Hub safely.
+5. **Infrastructure Orchestration:** Spins up a KinD Kubernetes cluster dynamically within the GitHub server, downloads the Terraform CLI, and automatically executes `terraform apply --auto-approve` to patch the live architectural state.
 
-# Get all tasks
-curl http://localhost:3001/tasks
-```
+---
 
-## ☸️ Kubernetes Deployment (Minikube)
+## 4. Infrastructure as Code (Terraform) & Kubernetes
+All cloud infrastructure is declared mathematically inside `terraform/main.tf` to achieve **Idempotency** (the ability to confidently destroy and perfectly reconstruct the cluster on demand).
 
-```bash
-# Start Minikube
-minikube start
+### 4.1 Deployment Strategy (Rolling Update)
+The Terraform scripts explicitly dictate a **RollingUpdate** strategy with `maxUnavailable: 1` and `maxSurge: 1`. 
+* **Justification:** If an update is pushed, Kubernetes replaces the pods one-by-one, guaranteeing absolute **Zero-Downtime**. If a catastrophic bug is detected, Kubernetes supports instant rollbacks via `kubectl rollout undo` to revert to previous ReplicaSets.
 
-# Apply all manifests
-kubectl apply -f k8s/namespace.yaml
-kubectl apply -f k8s/mongodb.yaml
-kubectl apply -f k8s/user-service.yaml
-kubectl apply -f k8s/task-service.yaml
+### 4.2 Persistent Storage
+By default, containers are stateless. The project utilizes a `kubernetes_persistent_volume_claim` (PVC) attached directly to the MongoDB cluster. 
+* **Justification:** If the database pod suffers a fatal crash, the actual data is preserved safely on a protected volume and seamlessly re-attached to the replacement pod upon reboot.
 
-# Check status
-kubectl get all -n taskmanager
-```
+---
 
-## 🛠️ Terraform (IaC)
+## 5. Extra DevOps Features Implemented
+To ensure enterprise-level compliance, two extra features were explicitly engineered into the core infrastructure:
 
-```bash
-cd terraform
-terraform init
-terraform plan -var="dockerhub_username=YOUR_USERNAME"
-terraform apply -var="dockerhub_username=YOUR_USERNAME"
+1. **Security Vulnerability Scanning:** Integrated directly as a blocking phase in the CI/CD pipeline using Trivy.
+2. **Mathematical Auto-Scaling:** A **Horizontal Pod Autoscaler (HPA)** was added to the Task-Service via Terraform. It actively monitors CPU utilziation. If organic traffic spikes cpu usage past 70%, the cluster automatically clones the Task-Service from 2 replicas up to 5 replicas dynamically to handle the load, scaling back down when traffic subsides to save computational cost.
 
-# Tear down everything
-terraform destroy -var="dockerhub_username=YOUR_USERNAME"
-```
+---
 
-## 🔁 CI/CD Pipeline
+## 6. How to Run & Verify Locally
+For local development, testing, and live presentation styling, you do not need to run the full Kubernetes cluster. 
 
-The GitHub Actions pipeline (`.github/workflows/deploy.yml`) runs automatically on push to `main`:
-
-1. **Build & Test** — Install deps, run tests
-2. **Docker Build + Security Scan** — Build images, scan with Trivy
-3. **Push** — Push to Docker Hub
-4. **Deploy** — Apply K8s manifests, verify rollout
-
-### Required GitHub Secrets
-| Secret              | Description                     |
-|---------------------|---------------------------------|
-| `DOCKERHUB_USERNAME`| Your Docker Hub username        |
-| `DOCKERHUB_TOKEN`   | Docker Hub access token         |
-| `KUBE_CONFIG`       | Base64-encoded kubeconfig file  |
-
-## 📈 Extra Features
-1. **Auto-scaling (HPA)** — task-service scales 2→5 replicas at 70% CPU
-2. **Security Scanning** — Trivy scans Docker images in CI/CD
-
-## 📝 Project Structure
-
-```
-CA2/
-├── user-service/          # User microservice
-│   ├── index.js
-│   ├── package.json
-│   └── Dockerfile
-├── task-service/          # Task microservice
-│   ├── index.js
-│   ├── package.json
-│   └── Dockerfile
-├── frontend/              # Demo UI
-│   └── index.html
-├── k8s/                   # Kubernetes manifests
-│   ├── namespace.yaml
-│   ├── mongodb.yaml
-│   ├── user-service.yaml
-│   └── task-service.yaml
-├── terraform/             # Infrastructure as Code
-│   ├── main.tf
-│   ├── variables.tf
-│   └── outputs.tf
-├── .github/workflows/     # CI/CD pipeline
-│   └── deploy.yml
-├── docker-compose.yml     # Local development
-└── README.md
-```
+Ensure Docker Desktop is running, then use the multi-container configuration tool:
+1. Open up a terminal directory containing the project.
+2. Build and start the architecture in the background:
+   ```bash
+   docker-compose up -d --build
+   ```
+3. Open `frontend/index.html` in any web browser to simulate the client application.
+4. When finished, safely tear down the containers:
+   ```bash
+   docker-compose down
+   ```
