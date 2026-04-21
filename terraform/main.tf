@@ -97,6 +97,20 @@ resource "kubernetes_deployment" "mongodb" {
               memory = "512Mi"
             }
           }
+          readiness_probe {
+            exec {
+              command = ["mongosh", "--eval", "db.adminCommand('ping')"]
+            }
+            initial_delay_seconds = 10
+            period_seconds        = 5
+          }
+          liveness_probe {
+            exec {
+              command = ["mongosh", "--eval", "db.adminCommand('ping')"]
+            }
+            initial_delay_seconds = 15
+            period_seconds        = 10
+          }
         }
         volume {
           name = "mongo-storage"
@@ -343,6 +357,161 @@ resource "kubernetes_horizontal_pod_autoscaler_v2" "task_service_hpa" {
         target {
           type                = "Utilization"
           average_utilization = 70
+        }
+      }
+    }
+  }
+}
+
+# ==============================================================
+# NETWORK POLICIES — Pod-to-Pod Traffic Isolation
+# ==============================================================
+
+# MongoDB: Only allow ingress from user-service and task-service
+resource "kubernetes_network_policy" "mongodb_isolation" {
+  metadata {
+    name      = "mongodb-allow-services-only"
+    namespace = kubernetes_namespace.taskmanager.metadata[0].name
+  }
+  spec {
+    pod_selector {
+      match_labels = {
+        app = "mongodb"
+      }
+    }
+    policy_types = ["Ingress"]
+    ingress {
+      from {
+        pod_selector {
+          match_labels = {
+            app = "user-service"
+          }
+        }
+      }
+      from {
+        pod_selector {
+          match_labels = {
+            app = "task-service"
+          }
+        }
+      }
+      ports {
+        port     = "27017"
+        protocol = "TCP"
+      }
+    }
+  }
+}
+
+# Task-service: Allow ingress on port 3001
+resource "kubernetes_network_policy" "task_service_policy" {
+  metadata {
+    name      = "task-service-policy"
+    namespace = kubernetes_namespace.taskmanager.metadata[0].name
+  }
+  spec {
+    pod_selector {
+      match_labels = {
+        app = "task-service"
+      }
+    }
+    policy_types = ["Ingress"]
+    ingress {
+      ports {
+        port     = "3001"
+        protocol = "TCP"
+      }
+    }
+  }
+}
+
+# User-service: Allow ingress on port 3000
+resource "kubernetes_network_policy" "user_service_policy" {
+  metadata {
+    name      = "user-service-policy"
+    namespace = kubernetes_namespace.taskmanager.metadata[0].name
+  }
+  spec {
+    pod_selector {
+      match_labels = {
+        app = "user-service"
+      }
+    }
+    policy_types = ["Ingress"]
+    ingress {
+      ports {
+        port     = "3000"
+        protocol = "TCP"
+      }
+    }
+  }
+}
+
+# ==============================================================
+# MONGODB BACKUP — CronJob + Dedicated PVC
+# ==============================================================
+resource "kubernetes_persistent_volume_claim" "mongo_backup_pvc" {
+  metadata {
+    name      = "mongo-backup-pvc"
+    namespace = kubernetes_namespace.taskmanager.metadata[0].name
+  }
+  spec {
+    access_modes       = ["ReadWriteOnce"]
+    storage_class_name = "local-path"
+    resources {
+      requests = {
+        storage = "1Gi"
+      }
+    }
+  }
+  wait_until_bound = false
+}
+
+resource "kubernetes_cron_job_v1" "mongodb_backup" {
+  metadata {
+    name      = "mongodb-backup"
+    namespace = kubernetes_namespace.taskmanager.metadata[0].name
+  }
+  spec {
+    schedule                      = "0 0 * * *"
+    successful_jobs_history_limit = 3
+    failed_jobs_history_limit     = 1
+    job_template {
+      metadata {}
+      spec {
+        template {
+          metadata {}
+          spec {
+            container {
+              name  = "mongodump"
+              image = "mongo:6"
+              command = [
+                "/bin/sh", "-c",
+                "TIMESTAMP=$(date +%Y%m%d-%H%M%S) && echo \"Starting MongoDB backup at $${TIMESTAMP}...\" && mongodump --host mongodb.${var.namespace}.svc.cluster.local:27017 --db taskmanager --out /backups/backup-$${TIMESTAMP} && echo \"Backup completed successfully.\""
+              ]
+              volume_mount {
+                name       = "backup-storage"
+                mount_path = "/backups"
+              }
+              resources {
+                requests = {
+                  cpu    = "50m"
+                  memory = "128Mi"
+                }
+                limits = {
+                  cpu    = "200m"
+                  memory = "256Mi"
+                }
+              }
+            }
+            restart_policy = "OnFailure"
+            volume {
+              name = "backup-storage"
+              persistent_volume_claim {
+                claim_name = kubernetes_persistent_volume_claim.mongo_backup_pvc.metadata[0].name
+              }
+            }
+          }
         }
       }
     }

@@ -25,17 +25,18 @@ When a user attempts to create a task via the Task-Service, the Task-Service doe
 ---
 
 ## 3. Continuous Integration & Continuous Deployment (CI/CD)
-The deployment is entirely disconnected from manual human interaction. Code pushed to the `main` branch on GitHub instantly triggers a 140-line `deploy.yml` CI/CD Pipeline.
+The deployment is entirely disconnected from manual human interaction. Code pushed to the `main` branch on GitHub instantly triggers the full CI/CD Pipeline.
 
 ### 3.1 Unification via Matrix Strategy
 Rather than maintaining split pipelines, the project uses a **Matrix Build Strategy** to uniformly loop over both microservices concurrently, ensuring both services receive identical testing and security enforcement.
 
 ### 3.2 Pipeline Flow
-1. **Build & Test:** Provisions Node.js and installs dependencies.
-2. **Dockerization:** Builds lightweight, multi-stage `node:18-alpine` containers.
-3. **DevSecOps (Trivy):** An AquaSecurity Trivy scan halts the pipeline if `CRITICAL` or `HIGH` vulnerabilities are detected inside the freshly built Docker image.
-4. **Push:** Uploads the authorized images to Docker Hub safely.
-5. **Infrastructure Orchestration:** Spins up a KinD Kubernetes cluster dynamically within the GitHub server, downloads the Terraform CLI, and automatically executes `terraform apply --auto-approve` to patch the live architectural state.
+1. **Build & Test:** Provisions Node.js, installs dependencies, runs unit tests, and executes `npm audit` to detect known vulnerabilities in third-party packages.
+2. **Code Quality (SonarCloud):** Runs static code analysis through SonarCloud to enforce a Quality Gate covering code smells, bugs, and security hotspots.
+3. **Dockerization:** Builds lightweight, multi-stage `node:18-alpine` containers.
+4. **DevSecOps (Trivy):** An AquaSecurity Trivy scan halts the pipeline if `CRITICAL` or `HIGH` vulnerabilities are detected inside the freshly built Docker image.
+5. **Push:** Uploads the authorized images to Docker Hub safely.
+6. **Infrastructure Orchestration:** Spins up a KinD Kubernetes cluster dynamically within the GitHub server, downloads the Terraform CLI, and automatically executes `terraform apply --auto-approve` to patch the live architectural state.
 
 ---
 
@@ -50,13 +51,21 @@ The Terraform scripts explicitly dictate a **RollingUpdate** strategy with `maxU
 By default, containers are stateless. The project utilizes a `kubernetes_persistent_volume_claim` (PVC) attached directly to the MongoDB cluster. 
 * **Justification:** If the database pod suffers a fatal crash, the actual data is preserved safely on a protected volume and seamlessly re-attached to the replacement pod upon reboot.
 
+### 4.3 Network Security (Network Policies)
+Three Kubernetes `NetworkPolicy` resources are deployed via Terraform to enforce pod-to-pod traffic isolation. MongoDB is completely locked down: only `user-service` and `task-service` pods can communicate with it on port 27017. This implements the principle of least privilege at the network layer.
+
+### 4.4 Automated Database Backups
+A Kubernetes `CronJob` runs `mongodump` daily at midnight, writing timestamped backups to a dedicated PersistentVolumeClaim. The CronJob retains the last 3 successful backups. Both the CronJob and its PVC are fully managed by Terraform.
+
 ---
 
 ## 5. Extra DevOps Features Implemented
-To ensure enterprise-level compliance, two extra features were explicitly engineered into the core infrastructure:
+To ensure enterprise-level compliance, the following additional features were explicitly engineered into the core infrastructure:
 
-1. **Security Vulnerability Scanning:** Integrated directly as a blocking phase in the CI/CD pipeline using Trivy.
-2. **Mathematical Auto-Scaling:** A **Horizontal Pod Autoscaler (HPA)** was added to the Task-Service via Terraform. It actively monitors CPU utilziation. If organic traffic spikes cpu usage past 70%, the cluster automatically clones the Task-Service from 2 replicas up to 5 replicas dynamically to handle the load, scaling back down when traffic subsides to save computational cost.
+1. **Security Vulnerability Scanning:** Integrated directly as a blocking phase in the CI/CD pipeline using Trivy, with additional npm audit and SonarCloud quality gates.
+2. **Mathematical Auto-Scaling:** A **Horizontal Pod Autoscaler (HPA)** was added to the Task-Service via Terraform. It actively monitors CPU utilization. If organic traffic spikes CPU usage past 70%, the cluster automatically clones the Task-Service from 2 replicas up to 5 replicas dynamically to handle the load, scaling back down when traffic subsides to save computational cost.
+3. **Network Policies:** Kubernetes Network Policies restrict pod-to-pod communication, isolating MongoDB from any unauthorized access.
+4. **Automated Backups:** A scheduled CronJob performs daily MongoDB backups to a persistent volume for disaster recovery.
 
 ---
 
@@ -74,3 +83,49 @@ Ensure Docker Desktop is running, then use the multi-container configuration too
    ```bash
    docker-compose down
    ```
+
+---
+
+## 7. Load Testing (HPA Validation)
+A `k6` load test script is included to validate the Horizontal Pod Autoscaler configuration:
+```bash
+# Forward the task-service port from the cluster
+kubectl port-forward svc/task-service 3001:3001 -n taskmanager
+
+# Run the load test (ramps to 300 virtual users)
+k6 run load-test.js
+
+# Monitor HPA scaling in real-time (in a second terminal)
+kubectl get hpa -n taskmanager --watch
+```
+Expected result: task-service scales from 2 to 5 replicas under sustained load and scales back down once the load subsides.
+
+---
+
+## 8. Monitoring (Prometheus + Grafana)
+For full cluster observability, deploy the Prometheus monitoring stack:
+```bash
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm install monitoring prometheus-community/kube-prometheus-stack -n monitoring --create-namespace
+kubectl port-forward svc/monitoring-grafana 3000:80 -n monitoring
+```
+Access Grafana at `http://localhost:3000` (default credentials: `admin` / `prom-operator`). Import dashboard ID `6417` for pod-level CPU, memory, and network metrics.
+
+---
+
+## 9. Troubleshooting
+
+### Docker Compose Issues
+| Problem | Solution |
+|---------|----------|
+| `port already in use` | Stop any local MongoDB or Node processes using ports 3000, 3001, or 27017 (`netstat -ano \| findstr :3000`) |
+| `mongodb connection refused` | Ensure Docker Desktop is running. Check container logs with `docker logs taskmanager-mongodb` |
+| `user-service cannot connect` | Verify all services are on the same Docker network (`docker network ls`) |
+
+### Kubernetes / KinD Issues
+| Problem | Solution |
+|---------|----------|
+| Pods stuck in `Pending` state | Check PVC binding: `kubectl get pvc -n taskmanager`. Ensure the StorageClass provisioner is installed. |
+| Terraform fails to apply | Ensure `~/.kube/config` is valid and the cluster is running: `kubectl cluster-info` |
+| HPA shows `<unknown>` CPU | Install the Metrics Server: `kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml` |
+| ImagePullBackOff | Verify Docker Hub credentials and that images have been pushed: `docker pull <username>/task-service:latest` |

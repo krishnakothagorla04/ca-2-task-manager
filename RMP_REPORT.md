@@ -33,12 +33,13 @@ The CI/CD pipeline is implemented using **GitHub Actions** and is triggered auto
 
 | Stage | Action | Tool |
 |-------|--------|------|
-| 1. Build & Test | Install dependencies, run tests | Node.js, npm |
-| 2. Docker Build | Build container images for both services | Docker |
-| 3. Security Scan | Scan images for vulnerabilities | Trivy |
-| 4. Push | Push images to Docker Hub | Docker Hub |
-| 5. Deploy | Apply Kubernetes manifests | kubectl |
-| 6. Verify | Confirm rollout success | kubectl rollout status |
+| 1. Build & Test | Install dependencies, run tests, audit dependencies | Node.js, npm, npm audit |
+| 2. Code Quality | Static analysis and quality gate enforcement | SonarCloud |
+| 3. Docker Build | Build container images for both services | Docker |
+| 4. Security Scan | Scan images for known CVEs | Trivy |
+| 5. Push | Push images to Docker Hub registry | Docker Hub |
+| 6. Deploy | Provision infrastructure via IaC | Terraform (KinD cluster) |
+| 7. Verify | Confirm rollout success for all services | kubectl rollout status |
 
 ### 3.3 Justification
 
@@ -47,6 +48,8 @@ The CI/CD pipeline is implemented using **GitHub Actions** and is triggered auto
 | **GitHub Actions** | Tightly integrated with the Git repository. Free tier sufficient for this project. YAML-based declarative pipelines are reproducible and version-controlled. |
 | **Docker Hub** | Industry-standard public registry. Simplifies image distribution for Kubernetes. |
 | **Trivy** | Open-source, fast vulnerability scanner. Integrates seamlessly into CI/CD without additional infrastructure. |
+| **SonarCloud** | Provides automated code quality analysis, code smell detection, and a formal Quality Gate. Free for open-source projects. |
+| **npm audit** | Built-in Node.js dependency vulnerability scanner. Catches known CVEs in third-party packages before they reach production. |
 
 ## 4. Infrastructure as Code (Terraform)
 
@@ -119,42 +122,82 @@ Auto-scaling ensures the system can handle traffic spikes without manual interve
 
 ### 8.1 Backup Plan
 - **Tool:** `mongodump` — creates binary exports of the MongoDB database
-- **Frequency:** Scheduled daily (via cron job or Kubernetes CronJob)
-- **Storage:** Backups stored in a persistent volume or cloud storage (e.g., S3)
+- **Automation:** A Kubernetes `CronJob` (`mongodb-backup`) runs `mongodump` daily at midnight (schedule: `0 0 * * *`)
+- **Storage:** Backups are written to a dedicated PersistentVolumeClaim (`mongo-backup-pvc`, 1Gi) mounted at `/backups`
+- **Retention:** The CronJob retains the last 3 successful backups and 1 failed job for debugging
+- **IaC:** The CronJob and its PVC are fully managed by Terraform, ensuring they are provisioned automatically alongside all other infrastructure
 
 ### 8.2 Recovery Plan
 - **Tool:** `mongorestore` — restores from a `mongodump` backup
 - **Process:**
-  1. Identify the most recent backup
-  2. Scale down task-service and user-service
-  3. Run `mongorestore` against the MongoDB instance
-  4. Scale services back up
-  5. Verify data integrity
+  1. Identify the most recent backup: `kubectl exec -it <backup-pod> -n taskmanager -- ls /backups/`
+  2. Scale down task-service and user-service: `kubectl scale deployment task-service user-service --replicas=0 -n taskmanager`
+  3. Run `mongorestore` against the MongoDB instance: `mongorestore --host mongodb.taskmanager.svc.cluster.local:27017 --db taskmanager /backups/backup-YYYYMMDD-HHMMSS/taskmanager`
+  4. Scale services back up: `kubectl scale deployment task-service --replicas=2 user-service --replicas=2 -n taskmanager`
+  5. Verify data integrity by checking task and user counts through the API
 
 ### 8.3 Kubernetes-Level Recovery
 - MongoDB uses a PersistentVolumeClaim (PVC), ensuring data survives pod restarts
 - Container images are stored in Docker Hub, so any service can be redeployed from scratch
+- All infrastructure is codified in Terraform; a full cluster rebuild is a single `terraform apply` command
 
 ## 9. Security
 
 ### 9.1 Container Security
-- **Trivy scanning** in CI/CD catches known vulnerabilities before images are deployed
-- **Alpine-based images** minimize attack surface
+- **Trivy scanning** in CI/CD catches known CVEs before images are deployed
+- **npm audit** checks all Node.js dependencies for known vulnerabilities during the Build & Test stage
+- **SonarCloud** performs static code analysis and enforces a Quality Gate for code smells, bugs, and security hotspots
+- **Alpine-based images** minimize attack surface by reducing the number of installed packages
 
-### 9.2 Network Security
+### 9.2 Network Security — Kubernetes Network Policies
+Three `NetworkPolicy` resources are deployed via Terraform to enforce pod-to-pod traffic isolation:
+
+| Policy | Target | Allowed Ingress |
+|--------|--------|-----------------|
+| `mongodb-allow-services-only` | MongoDB pods | Only from `user-service` and `task-service` pods on port 27017 |
+| `task-service-policy` | Task-service pods | Any source on port 3001 |
+| `user-service-policy` | User-service pods | Any source on port 3000 |
+
+**Effect:** MongoDB is completely isolated from external access. Only the two application services can reach the database. This follows the principle of least privilege at the network layer.
+
+### 9.3 Application Security
 - Services communicate internally via Kubernetes ClusterIP (not exposed externally)
 - Only task-service is exposed via NodePort for demo purposes
+- Passwords are not returned in API responses (user-service strips the password field)
 
 ## 10. Monitoring & Logging
 
 ### 10.1 Current Implementation
-- **Application logging:** Morgan HTTP logger in both services
+- **Application logging:** Morgan HTTP logger in both services (combined format for production-grade access logs)
 - **Kubernetes logs:** `kubectl logs deployment/task-service -n taskmanager`
-- **Health checks:** `/health` endpoints used by Kubernetes readiness and liveness probes
+- **Health checks:** `/health` endpoints used by Kubernetes readiness and liveness probes on all three deployments (user-service, task-service, and MongoDB)
+- **HPA Metrics:** The Horizontal Pod Autoscaler monitors real-time CPU utilization via the Kubernetes Metrics Server
 
-### 10.2 Future Improvements
-- Prometheus + Grafana for metrics dashboards
+### 10.2 Monitoring Setup Guide (Prometheus + Grafana)
+For full observability in a production environment, deploy the Prometheus monitoring stack:
+```bash
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm install monitoring prometheus-community/kube-prometheus-stack -n monitoring --create-namespace
+kubectl port-forward svc/monitoring-grafana 3000:80 -n monitoring
+```
+Access Grafana at `http://localhost:3000` (default credentials: admin/prom-operator). Import the Kubernetes cluster dashboard (ID: 6417) for pod-level CPU, memory, and network metrics.
+
+### 10.3 Load Testing (HPA Validation)
+To validate the auto-scaling configuration, a `k6` load test script is included:
+```bash
+kubectl port-forward svc/task-service 3001:3001 -n taskmanager
+k6 run load-test.js
+```
+Monitor the HPA in real-time during the test:
+```bash
+kubectl get hpa -n taskmanager --watch
+```
+Expected behaviour: task-service scales from 2 to 5 replicas when CPU exceeds 70%, and scales back down after the load subsides.
+
+### 10.4 Future Improvements
+- Prometheus + Grafana for persistent metrics dashboards
 - ELK/EFK stack for centralized log aggregation
+- Jaeger or OpenTelemetry for distributed tracing across microservices
 
 ## 11. Evaluation
 
@@ -181,3 +224,16 @@ Auto-scaling ensures the system can handle traffic spikes without manual interve
 | Zero-downtime deployments | Adds complexity vs. simple server deployment |
 | Full automation | Requires initial setup of secrets and cluster |
 | Reproducible infrastructure | Learning curve for Terraform + K8s |
+
+## 12. Future Improvements
+
+While the current system meets all enterprise requirements, the following enhancements would further strengthen the architecture for a large-scale production deployment:
+
+| Improvement | Description |
+|-------------|-------------|
+| **Service Mesh (Istio)** | Would provide mutual TLS between services, advanced traffic routing (canary deployments, traffic splitting), and built-in observability without modifying application code. |
+| **Secret Management (HashiCorp Vault)** | Currently, secrets are stored in GitHub repository secrets. Vault would provide dynamic secret generation, automatic rotation, and fine-grained access control for database credentials and API keys. |
+| **GitOps (ArgoCD/Flux)** | Would replace the push-based CI/CD model with a pull-based approach, continuously reconciling cluster state with the Git repository. |
+| **Centralised Logging (EFK Stack)** | Elasticsearch, Fluentd, and Kibana would aggregate logs from all services into a searchable dashboard, replacing per-pod log inspection. |
+| **Database Replication** | A MongoDB ReplicaSet with 3 members would provide high availability and automatic failover for the data layer. |
+| **Container Registry (Private)** | Migrating from Docker Hub to a private registry (e.g., AWS ECR, GitHub Container Registry) would improve security by preventing public image exposure. |
