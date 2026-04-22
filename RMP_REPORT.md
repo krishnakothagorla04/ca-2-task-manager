@@ -24,7 +24,7 @@ The application is decomposed into two independently deployable services:
 | **MongoDB** | Schema-flexible NoSQL database suited for rapid prototyping and JSON-native data. Aligns naturally with Node.js. |
 | **REST for inter-service communication** | Simple, stateless, and widely understood protocol. Sufficient for synchronous validation calls between services. |
 
-## 3. CI/CD Pipeline (45 Marks)
+## 3. CI/CD Pipeline 
 
 ### 3.1 Pipeline Overview
 The CI/CD pipeline is implemented using **GitHub Actions** and is triggered automatically on every `git push` to the `main` branch. No manual intervention is required at any stage.
