@@ -9,12 +9,17 @@ const morgan = require('morgan');
 const cors = require('cors');
 
 const app = express();
+app.disable('x-powered-by'); // Security: prevent Express version disclosure
 const PORT = process.env.PORT || 3000;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/taskmanager';
 
 // Middleware
 app.use(express.json());
-app.use(cors());
+app.use(cors({
+  origin: process.env.CORS_ORIGIN || '*', // Configured via environment variable in production
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type']
+}));
 app.use(morgan('combined'));
 
 // ---- MongoDB Connection ----

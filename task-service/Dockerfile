@@ -8,10 +8,13 @@ WORKDIR /usr/src/app
 
 # Install dependencies first (layer caching)
 COPY package*.json ./
-RUN npm install --omit=dev
+RUN npm install --omit=dev --ignore-scripts
 
-# Copy application code
-COPY . .
+# Copy application code (only required files)
+COPY index.js ./
+
+# Security: run as non-root user
+USER node
 
 EXPOSE 3001
 
