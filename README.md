@@ -54,10 +54,8 @@ By default, containers are stateless. The project utilizes a `kubernetes_persist
 ### 4.3 Network Security (Network Policies)
 Three Kubernetes `NetworkPolicy` resources are deployed via Terraform to enforce pod-to-pod traffic isolation. MongoDB is completely locked down: only `user-service` and `task-service` pods can communicate with it on port 27017. This implements the principle of least privilege at the network layer.
 
-### 4.4 Automated Database Backups
-A Kubernetes `CronJob` runs `mongodump` daily at midnight, writing timestamped backups to a dedicated PersistentVolumeClaim. The CronJob retains the last 3 successful backups. Both the CronJob and its PVC are fully managed by Terraform.
-
----
+### 4.4 Automated Release Orchestration & Configuration Management
+A core requirement of this RMP is to fully automate provisioning and release orchestration so that no step of a release depends on manual intervention. The stack achieves this end-to-end: GitHub Actions drives every pipeline stage (build, test, scan, push, deploy), Terraform declaratively provisions every Kubernetes resource (Deployments, Services, PVCs, HPA, NetworkPolicies and the backup CronJob), and kubectl rollout status gates the deployment before the pipeline is marked green. Because the cluster is reconstructed from source on every run, its live state cannot drift away from what is in Git — eliminating the configuration drift that plagues pipelines still dependent on hand-edited YAML or console clicks. Continued configuration management is enforced by Terraform's idempotency: re-running terraform apply converges the live cluster back to its declared state, silently correcting any ad-hoc modifications. Together, these controls realise the full promise of Continuous Delivery: every commit on main is a releasable, reproducible, drift-free unit of infrastructure and application change.
 
 ## 5. Extra DevOps Features Implemented
 To ensure enterprise-level compliance, the following additional features were explicitly engineered into the core infrastructure:
