@@ -38,6 +38,41 @@ Rather than maintaining split pipelines, the project uses a **Matrix Build Strat
 5. **Push:** Uploads the authorized images to Docker Hub safely.
 6. **Infrastructure Orchestration:** Spins up a KinD Kubernetes cluster dynamically within the GitHub server, downloads the Terraform CLI, and automatically executes `terraform apply --auto-approve` to patch the live architectural state.
 
+### 3.3 System Architecture
+## Microservice Decomposition
+Rather than a single tightly coupled artefact, the application is decomposed into three independently deployable runtime units, following Newman’s small-service guidance (Newman, 2021):
+User-Service (Node.js / Express, port 3000): handles user registration, authentication and session lifecycle. Passwords are bcrypt-hashed before persistence; sensitive fields are stripped from API responses.
+Task-Service (Node.js / Express, port 3001): manages task CRUD. Before inserting any task, it performs a synchronous HTTP call to User-Service to validate the assignee, demonstrating true inter-service communication.
+MongoDB 6 (port 27017): NoSQL data layer with separate collections for users and tasks, accessed via the Mongoose ODM and locked down by Kubernetes NetworkPolicy.
+Frontend SPA (Vanilla JS / HTML): served statically, authenticates against User-Service and displays tasks scoped strictly to the authenticated session.
+
+Figure 1 - System Architecture Diagram (services, data layer, pipeline, backup and security controls).
+## Architectural Decisions
+Decision
+Justification
+Microservices over monolith
+Each service scales, deploys and fails independently, providing graceful degradation and team autonomy (Newman, 2021).
+Node.js / Express
+Non-blocking event loop is optimal for I/O-bound REST microservices (Node.js Foundation, 2023).
+MongoDB
+Schema-flexible JSON-native document store that aligns naturally with JavaScript-centric services (MongoDB, 2023).
+REST for inter-service calls
+Stateless and widely understood; sufficient for synchronous validation between two small services.
+Vanilla JS frontend
+Zero framework overhead; straightforward session management via localStorage.
+
+
+## Docker Compose - Local Development
+A docker-compose.yml at the repository root orchestrates all four services on a shared bridge network for local development. The task-service receives USER_SERVICE_URL as an environment variable, illustrating twelve-factor environment-driven configuration (Wiggins, 2017). MongoDB data is persisted via a named volume so that local state survives container restarts.
+
+## Running Application
+The screenshots below show the live frontend once the full stack is running. Sign-in authenticates against User-Service; tasks on the dashboard are then scoped to that session, demonstrating the path Frontend to User-Service to Task-Service to MongoDB.
+
+Figure 2 - Sign-in page served by the frontend SPA.
+
+Figure 3 - Authenticated dashboard showing a session-scoped task after sign-in.
+
+
 ---
 
 ## 4. Infrastructure as Code (Terraform) & Kubernetes
