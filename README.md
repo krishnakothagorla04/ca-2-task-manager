@@ -46,7 +46,6 @@ Task-Service (Node.js / Express, port 3001): manages task CRUD. Before inserting
 MongoDB 6 (port 27017): NoSQL data layer with separate collections for users and tasks, accessed via the Mongoose ODM and locked down by Kubernetes NetworkPolicy.
 Frontend SPA (Vanilla JS / HTML): served statically, authenticates against User-Service and displays tasks scoped strictly to the authenticated session.
 
-Figure 1 - System Architecture Diagram (services, data layer, pipeline, backup and security controls).
 ## Architectural Decisions
 Decision
 Justification
@@ -67,10 +66,6 @@ A docker-compose.yml at the repository root orchestrates all four services on a 
 
 ## Running Application
 The screenshots below show the live frontend once the full stack is running. Sign-in authenticates against User-Service; tasks on the dashboard are then scoped to that session, demonstrating the path Frontend to User-Service to Task-Service to MongoDB.
-
-Figure 2 - Sign-in page served by the frontend SPA.
-
-Figure 3 - Authenticated dashboard showing a session-scoped task after sign-in.
 
 
 ---
